@@ -1,0 +1,25 @@
+{
+  "name": "google-calendar-duplicator",
+  "description": "",
+  "dependencies": {
+    "@types/google-apps-script": "^2.0.8"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "gts": "^7.0.0",
+    "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "lint": "gts lint",
+    "clean": "gts clean",
+    "compile": "tsc",
+    "fix": "gts fix",
+    "prepare": "pnpm run compile",
+    "pretest": "pnpm run compile",
+    "posttest": "pnpm run lint"
+  },
+  "packageManager": "pnpm@10.29.3",
+  "engines": {
+    "node": "24.x"
+  }
+}

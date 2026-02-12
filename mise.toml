@@ -1,0 +1,8 @@
+[tools]
+node = "24"
+"npm:pnpm" = "10"
+"npm:@google/clasp" = "3"
+
+[env]
+# This will make CLIs installed with npm available without npx.
+_.path = ["{{config_root}}/node_modules/.bin"]
