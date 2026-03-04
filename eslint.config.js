@@ -3,6 +3,6 @@
 module.exports = [
   ...require('gts'),
   {
-    ignores: ['build/'],
+    ignores: ['build/', '*.test.ts', 'vitest.config.ts'],
   },
 ];

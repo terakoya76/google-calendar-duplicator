@@ -50,11 +50,10 @@ Required Properties
 ```sh
 jq . -c <<EOF
 {
-  "toCalendarId": "target-calendar-id@example.com",
-  "fromCalendarIds": [
-    "source-calendar-1@example.com",
-    "source-calendar-2@gmail.com",
-    "source-calendar-2@group.calendar.google.com"
+  "toCalendar": {"id": "target-calendar-id@example.com", "alias": "hub"},
+  "fromCalendars": [
+    {"id": "source-calendar-1@example.com", "alias": "team-alpha"},
+    {"id": "source-calendar-2@gmail.com", "alias": "team-beta"}
   ],
   "eventTitle": "Absence"
 }
@@ -63,9 +62,27 @@ EOF
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `toCalendarId` | string | Target calendar ID to sync events to |
-| `fromCalendarIds` | string[] | Array of source calendar IDs to sync events from |
+| `toCalendar` | object | Target calendar configuration |
+| `toCalendar.id` | string | Target calendar ID to sync events to |
+| `toCalendar.alias` | string | Alias for the target calendar (used for circular sync prevention) |
+| `fromCalendars` | array | Array of source calendar objects |
+| `fromCalendars[].id` | string | Source calendar ID |
+| `fromCalendars[].alias` | string | Alias for the source calendar |
 | `eventTitle` | string | Title for the placeholder events created in target calendar |
+
+The `alias` field is used to track event provenance without exposing the actual calendar ID. This prevents circular sync issues in multi-calendar topologies while keeping calendar identities private.
+
+**Important:** Aliases must be consistent across all deployments. For example, if Account B uses `"alias": "team-alpha"`, then Account A must also use `"alias": "team-alpha"` for B's calendar in its `fromCalendars`.
+
+### Grant Calendar Access
+
+Let `Account A` be the owner of toCalendarId, and `Account B` and `Account C` be the owners of fromCalendarIds.
+In this case, the `Account A` requires access to the calendars of `Account B` and `Account C`.
+
+You can grant the read access for `Account B` and `Account C` by
+- Open the Google Calendar for `Accounts B` and `Account C`.
+- Click the target calendar's "Settings and sharing".
+- Go to "Shared with" and grant `Account A` with view permissions.
 
 ### Setting Up Triggers
 
@@ -100,11 +117,11 @@ depends = ["deploy-account-1", "deploy-account-2"]
 
 [tasks.deploy-account-1]
 description = "Deploy to account-1 Google Apps Script project"
-run = "clasp push -P ./config/.clasp-account-1.json -A ~/.clasprc-account-1.json -I ./.claspignore"
+run = "clasp push -P ./config/.clasp-account-1.json -A ~/.clasprc-account-1.json -I ./.claspignore -f"
 
 [tasks.deploy-account-2]
 description = "Deploy to account-2 Google Apps Script project"
-run = "clasp push -P ./config/.clasp-account-2.json -A ~/.clasprc-account-2.json -I ./.claspignore"
+run = "clasp push -P ./config/.clasp-account-2.json -A ~/.clasprc-account-2.json -I ./.claspignore -f"
 EOF
 
 mise run deploy

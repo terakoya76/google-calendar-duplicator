@@ -7,7 +7,8 @@
   "devDependencies": {
     "@types/node": "^25.3.3",
     "gts": "^7.0.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
   "scripts": {
     "lint": "gts lint",
@@ -15,8 +16,9 @@
     "compile": "tsc",
     "fix": "gts fix",
     "prepare": "pnpm run compile",
-    "pretest": "pnpm run compile",
-    "posttest": "pnpm run lint"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "packageManager": "pnpm@9.15.9",
   "engines": {
