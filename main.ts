@@ -8,6 +8,11 @@ interface CalendarEventLike {
   getDescription(): string | null;
 }
 
+/** Generic interface for date objects (works with both standard Date and GAS Date) */
+interface DateLike {
+  getTime(): number;
+}
+
 interface SyncConfig {
   toCalendar: CalendarEntry;
   fromCalendars: CalendarEntry[];
@@ -41,6 +46,10 @@ function buildAliasToCalendarIdMap(
 
 function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function createTimeSlotKey(startTime: DateLike, endTime: DateLike): string {
+  return `${startTime.getTime()}|${endTime.getTime()}`;
 }
 
 function extractSourceCalendarAlias(description: string): string | null {
@@ -215,6 +224,7 @@ function copyEventsForDay(
   fromCalendarAliases: Set<string>,
 ) {
   const events = getEventsForDays(fromCalendar, startDate, days);
+  const processedTimeSlots = new Set<string>();
 
   events.forEach(e => {
     // Skip all-day events
@@ -248,11 +258,26 @@ function copyEventsForDay(
         return;
       }
 
+      // Skip duplicate time slots from the same source calendar
+      // Check AFTER circular sync prevention so skipped events don't consume time slots
+      const timeSlotKey = createTimeSlotKey(e.getStartTime(), e.getEndTime());
+      if (processedTimeSlots.has(timeSlotKey)) {
+        return;
+      }
+      processedTimeSlots.add(timeSlotKey);
+
       // Forward the event to next calendar, preserving the original source marker
       toCalendar
         .createEvent(eventTitle, e.getStartTime(), e.getEndTime())
         .setDescription(e.getDescription());
     } else {
+      // Skip duplicate time slots from the same source calendar
+      const timeSlotKey = createTimeSlotKey(e.getStartTime(), e.getEndTime());
+      if (processedTimeSlots.has(timeSlotKey)) {
+        return;
+      }
+      processedTimeSlots.add(timeSlotKey);
+
       // This is an original event (not synced)
       const description = createSyncDescription(fromCalendarAlias);
       toCalendar
@@ -286,5 +311,6 @@ if (typeof module !== 'undefined') {
     extractSourceCalendarAlias,
     buildAliasToCalendarIdMap,
     escapeRegExp,
+    createTimeSlotKey,
   };
 }

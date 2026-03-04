@@ -6,6 +6,7 @@ import {
   createSyncDescription,
   extractSourceCalendarAlias,
   buildAliasToCalendarIdMap,
+  createTimeSlotKey,
 } from './main';
 
 // Mock GAS Calendar types
@@ -140,5 +141,61 @@ describe('buildAliasToCalendarIdMap', () => {
   it('should handle empty input', () => {
     const map = buildAliasToCalendarIdMap([]);
     expect(Object.keys(map)).toHaveLength(0);
+  });
+});
+
+describe('createTimeSlotKey', () => {
+  it('should create unique key from start and end times', () => {
+    const startTime = new Date('2024-01-01T10:00:00');
+    const endTime = new Date('2024-01-01T11:00:00');
+    const key = createTimeSlotKey(startTime, endTime);
+
+    expect(key).toBe(`${startTime.getTime()}|${endTime.getTime()}`);
+  });
+
+  it('should create different keys for different time slots', () => {
+    const slot1Start = new Date('2024-01-01T10:00:00');
+    const slot1End = new Date('2024-01-01T11:00:00');
+    const slot2Start = new Date('2024-01-01T11:00:00');
+    const slot2End = new Date('2024-01-01T12:00:00');
+
+    const key1 = createTimeSlotKey(slot1Start, slot1End);
+    const key2 = createTimeSlotKey(slot2Start, slot2End);
+
+    expect(key1).not.toBe(key2);
+  });
+
+  it('should create different keys for same start but different end', () => {
+    const startTime = new Date('2024-01-01T10:00:00');
+    const endTime1 = new Date('2024-01-01T11:00:00');
+    const endTime2 = new Date('2024-01-01T12:00:00');
+
+    const key1 = createTimeSlotKey(startTime, endTime1);
+    const key2 = createTimeSlotKey(startTime, endTime2);
+
+    expect(key1).not.toBe(key2);
+  });
+
+  it('should create different keys for different start but same end', () => {
+    const startTime1 = new Date('2024-01-01T09:00:00');
+    const startTime2 = new Date('2024-01-01T10:00:00');
+    const endTime = new Date('2024-01-01T11:00:00');
+
+    const key1 = createTimeSlotKey(startTime1, endTime);
+    const key2 = createTimeSlotKey(startTime2, endTime);
+
+    expect(key1).not.toBe(key2);
+  });
+
+  it('should create identical keys for identical time slots', () => {
+    const startTime1 = new Date('2024-01-01T10:00:00');
+    const endTime1 = new Date('2024-01-01T11:00:00');
+    const startTime2 = new Date('2024-01-01T10:00:00');
+    const endTime2 = new Date('2024-01-01T11:00:00');
+
+    const key1 = createTimeSlotKey(startTime1, endTime1);
+    const key2 = createTimeSlotKey(startTime2, endTime2);
+
+    expect(key1).toBe(key2);
   });
 });
