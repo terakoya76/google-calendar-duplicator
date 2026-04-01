@@ -5,7 +5,7 @@
     "@types/google-apps-script": "^2.0.8"
   },
   "devDependencies": {
-    "@types/node": "^25.3.3",
+    "@types/node": "^25.5.0",
     "gts": "^7.0.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
