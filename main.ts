@@ -13,6 +13,32 @@ interface DateLike {
   getTime(): number;
 }
 
+/** Extended event interface for sync classification logic */
+interface SyncableEvent extends CalendarEventLike {
+  getStartTime(): DateLike;
+  getEndTime(): DateLike;
+  isAllDayEvent(): boolean;
+}
+
+/** Represents an event that should exist in the target calendar */
+interface DesiredEvent {
+  startTime: DateLike;
+  endTime: DateLike;
+  description: string;
+}
+
+/** Result of classifying a source event for sync eligibility */
+interface ClassifiedEvent {
+  key: string;
+  description: string;
+}
+
+/** Result of computing the diff between existing and desired events */
+interface SyncDiff<TExisting> {
+  toCreate: DesiredEvent[];
+  toDelete: TExisting[];
+}
+
 interface SyncConfig {
   toCalendar: CalendarEntry;
   fromCalendars: CalendarEntry[];
@@ -48,10 +74,6 @@ function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function createTimeSlotKey(startTime: DateLike, endTime: DateLike): string {
-  return `${startTime.getTime()}|${endTime.getTime()}`;
-}
-
 function extractSourceCalendarAlias(description: string): string | null {
   if (!description || !description.includes(SYNC_MARKER)) {
     return null;
@@ -61,6 +83,95 @@ function extractSourceCalendarAlias(description: string): string | null {
   );
   const match = description.match(pattern);
   return match ? match[1] : null;
+}
+
+function createSyncEventKey(
+  sourceAlias: string,
+  startTime: DateLike,
+  endTime: DateLike,
+): string {
+  return `${sourceAlias}|${startTime.getTime()}|${endTime.getTime()}`;
+}
+
+function classifySourceEvent(
+  event: SyncableEvent,
+  fromCalendarAlias: string,
+  toCalendarAlias: string,
+  aliasToCalendarId: Record<string, string>,
+  toCalendarId: string,
+  fromCalendarAliases: Set<string>,
+): ClassifiedEvent | null {
+  // Skip all-day events
+  if (event.isAllDayEvent()) {
+    return null;
+  }
+
+  if (isSyncedEvent(event)) {
+    const sourceAlias = extractSourceCalendarAlias(
+      event.getDescription() || '',
+    );
+
+    // Skip if the source alias is one of our fromCalendars (prevent re-forwarding)
+    if (sourceAlias && fromCalendarAliases.has(sourceAlias)) {
+      return null;
+    }
+
+    // Skip if target calendar matches source alias (prevent circular sync)
+    if (sourceAlias && sourceAlias === toCalendarAlias) {
+      return null;
+    }
+
+    // Also check by resolving alias to calendar ID
+    if (sourceAlias && aliasToCalendarId[sourceAlias] === toCalendarId) {
+      return null;
+    }
+
+    const effectiveAlias = sourceAlias || fromCalendarAlias;
+    const key = createSyncEventKey(
+      effectiveAlias,
+      event.getStartTime(),
+      event.getEndTime(),
+    );
+    // Preserve original description if valid, otherwise create a proper one
+    const description = sourceAlias
+      ? event.getDescription() || ''
+      : createSyncDescription(fromCalendarAlias);
+
+    return {key, description};
+  }
+
+  // Original (non-synced) event
+  const key = createSyncEventKey(
+    fromCalendarAlias,
+    event.getStartTime(),
+    event.getEndTime(),
+  );
+  const description = createSyncDescription(fromCalendarAlias);
+  return {key, description};
+}
+
+function computeSyncDiff<TExisting>(
+  existingEvents: Map<string, TExisting>,
+  desiredEvents: Map<string, DesiredEvent>,
+): SyncDiff<TExisting> {
+  const toCreate: DesiredEvent[] = [];
+  const toDelete: TExisting[] = [];
+
+  // Events in desired but not existing → create
+  for (const [key, event] of desiredEvents) {
+    if (!existingEvents.has(key)) {
+      toCreate.push(event);
+    }
+  }
+
+  // Events in existing but not desired → delete
+  for (const [key, event] of existingEvents) {
+    if (!desiredEvents.has(key)) {
+      toDelete.push(event);
+    }
+  }
+
+  return {toCreate, toDelete};
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -105,23 +216,88 @@ function syncEventsForDay(startDate: Date, days: number) {
 
   const toCalendar = getCalendarById(config.toCalendar.id);
   const toCalendarAlias = config.toCalendar.alias;
+  const toCalendarId = toCalendar.getId();
 
-  deleteEventsForDay(toCalendar, startDate, days, config.eventTitle);
+  // Step 1: Build map of existing synced events in target calendar
+  const existingEvents = getEventsForDays(toCalendar, startDate, days);
+  const existingMap = new Map<
+    string,
+    GoogleAppsScript.Calendar.CalendarEvent
+  >();
+  for (const event of existingEvents) {
+    if (event.getTitle() === config.eventTitle && isSyncedEvent(event)) {
+      const desc = event.getDescription() || '';
+      const sourceAlias = extractSourceCalendarAlias(desc);
+      if (sourceAlias) {
+        const key = createSyncEventKey(
+          sourceAlias,
+          event.getStartTime(),
+          event.getEndTime(),
+        );
+        if (existingMap.has(key)) {
+          console.log(
+            `Duplicate existing synced event for key ${key}, deleting duplicate`,
+          );
+          event.deleteEvent();
+        } else {
+          existingMap.set(key, event);
+        }
+      }
+    }
+  }
 
+  // Step 2: Build map of desired events from all source calendars
+  const desiredMap = new Map<string, DesiredEvent>();
   for (const entry of config.fromCalendars) {
     const fromCalendar = getCalendarById(entry.id);
+    const sourceEvents = getEventsForDays(fromCalendar, startDate, days);
 
-    copyEventsForDay(
-      fromCalendar,
-      entry.alias,
-      toCalendar,
-      toCalendarAlias,
-      startDate,
-      days,
-      config.eventTitle,
-      aliasToCalendarId,
-      fromCalendarAliases,
-    );
+    for (const event of sourceEvents) {
+      const classified = classifySourceEvent(
+        event,
+        entry.alias,
+        toCalendarAlias,
+        aliasToCalendarId,
+        toCalendarId,
+        fromCalendarAliases,
+      );
+      if (classified && !desiredMap.has(classified.key)) {
+        desiredMap.set(classified.key, {
+          startTime: event.getStartTime(),
+          endTime: event.getEndTime(),
+          description: classified.description,
+        });
+      }
+    }
+  }
+
+  // Step 3: Compute diff and apply only the changes
+  const diff = computeSyncDiff(existingMap, desiredMap);
+
+  console.log(
+    `Diff: ${diff.toCreate.length} to create, ${diff.toDelete.length} to delete (${existingMap.size} existing, ${desiredMap.size} desired)`,
+  );
+
+  for (const event of diff.toDelete) {
+    try {
+      event.deleteEvent();
+    } catch (e) {
+      console.log(`Failed to delete event: ${e}`);
+    }
+  }
+
+  for (const event of diff.toCreate) {
+    try {
+      toCalendar
+        .createEvent(
+          config.eventTitle,
+          event.startTime as Date,
+          event.endTime as Date,
+        )
+        .setDescription(event.description);
+    } catch (e) {
+      console.log(`Failed to create event: ${e}`);
+    }
   }
 }
 
@@ -196,97 +372,6 @@ function getCalendarById(
   return calendar;
 }
 
-function deleteEventsForDay(
-  calendar: GoogleAppsScript.Calendar.Calendar,
-  startDate: Date,
-  days: number,
-  eventTitle: string,
-) {
-  const events = getEventsForDays(calendar, startDate, days);
-  events.forEach(e => {
-    // Only delete events that BOTH match the eventTitle AND have the sync marker.
-    // This protects manually created events with the same title.
-    if (e.getTitle() === eventTitle && isSyncedEvent(e)) {
-      e.deleteEvent();
-    }
-  });
-}
-
-function copyEventsForDay(
-  fromCalendar: GoogleAppsScript.Calendar.Calendar,
-  fromCalendarAlias: string,
-  toCalendar: GoogleAppsScript.Calendar.Calendar,
-  toCalendarAlias: string,
-  startDate: Date,
-  days: number,
-  eventTitle: string,
-  aliasToCalendarId: Record<string, string>,
-  fromCalendarAliases: Set<string>,
-) {
-  const events = getEventsForDays(fromCalendar, startDate, days);
-  const processedTimeSlots = new Set<string>();
-
-  events.forEach(e => {
-    // Skip all-day events
-    if (e.isAllDayEvent()) {
-      return;
-    }
-
-    // Check if this is a synced event (has sync marker in description)
-    if (isSyncedEvent(e)) {
-      // Extract the original source alias from the marker
-      const sourceAlias = extractSourceCalendarAlias(e.getDescription());
-
-      // Skip if the source alias is one of our fromCalendars
-      // This prevents re-forwarding events that have already been through this sync path
-      // e.g., B -> A -> C, then C -> A should not re-forward the event back to A
-      if (sourceAlias && fromCalendarAliases.has(sourceAlias)) {
-        return;
-      }
-
-      // Skip if the target calendar's alias matches the source alias (prevent circular sync)
-      // e.g., B's event in A should not be synced back to B
-      if (sourceAlias && sourceAlias === toCalendarAlias) {
-        return;
-      }
-
-      // Also check by resolving alias to calendar ID
-      if (
-        sourceAlias &&
-        aliasToCalendarId[sourceAlias] === toCalendar.getId()
-      ) {
-        return;
-      }
-
-      // Skip duplicate time slots from the same source calendar
-      // Check AFTER circular sync prevention so skipped events don't consume time slots
-      const timeSlotKey = createTimeSlotKey(e.getStartTime(), e.getEndTime());
-      if (processedTimeSlots.has(timeSlotKey)) {
-        return;
-      }
-      processedTimeSlots.add(timeSlotKey);
-
-      // Forward the event to next calendar, preserving the original source marker
-      toCalendar
-        .createEvent(eventTitle, e.getStartTime(), e.getEndTime())
-        .setDescription(e.getDescription());
-    } else {
-      // Skip duplicate time slots from the same source calendar
-      const timeSlotKey = createTimeSlotKey(e.getStartTime(), e.getEndTime());
-      if (processedTimeSlots.has(timeSlotKey)) {
-        return;
-      }
-      processedTimeSlots.add(timeSlotKey);
-
-      // This is an original event (not synced)
-      const description = createSyncDescription(fromCalendarAlias);
-      toCalendar
-        .createEvent(eventTitle, e.getStartTime(), e.getEndTime())
-        .setDescription(description);
-    }
-  });
-}
-
 function getEventsForDays(
   calendar: GoogleAppsScript.Calendar.Calendar,
   startDate: Date,
@@ -311,6 +396,8 @@ if (typeof module !== 'undefined') {
     extractSourceCalendarAlias,
     buildAliasToCalendarIdMap,
     escapeRegExp,
-    createTimeSlotKey,
+    createSyncEventKey,
+    classifySourceEvent,
+    computeSyncDiff,
   };
 }

@@ -24,6 +24,9 @@ jobs:
     - name: lint
       run: pnpm lint
 
+    - name: test
+      run: pnpm test
+
   dependabot:
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
