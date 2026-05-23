@@ -5,16 +5,17 @@
     "@types/google-apps-script": "^2.0.8"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
     "@types/node": "^25.5.0",
-    "gts": "^7.0.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.2"
   },
   "scripts": {
-    "lint": "gts lint",
-    "clean": "gts clean",
+    "lint": "biome check",
+    "fix": "biome check --write",
+    "format": "biome format --write",
+    "clean": "rm -rf build",
     "compile": "tsc",
-    "fix": "gts fix",
     "prepare": "pnpm run compile",
     "test": "vitest run",
     "test:watch": "vitest",

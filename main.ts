@@ -174,20 +174,20 @@ function computeSyncDiff<TExisting>(
   return {toCreate, toDelete};
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// biome-ignore lint/correctness/noUnusedVariables: GAS trigger entry point
 function syncEventsForToday() {
   const today = new Date();
   syncEventsForDay(today, 1);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// biome-ignore lint/correctness/noUnusedVariables: GAS trigger entry point
 function syncEventsForTommorow() {
   const today = new Date();
   const tomorrow = new Date(today.getTime() + 1 * 24 * 60 * 60 * 1000);
   syncEventsForDay(tomorrow, 1);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// biome-ignore lint/correctness/noUnusedVariables: GAS trigger entry point
 function syncEventsAfter2To14Days() {
   const days = 2;
   const today = new Date();
@@ -195,7 +195,7 @@ function syncEventsAfter2To14Days() {
   syncEventsForDay(twoDaysAfter, 14 - days);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// biome-ignore lint/correctness/noUnusedVariables: GAS trigger entry point
 function syncEventsAfter15To90Days() {
   const days = 15;
   const today = new Date();

@@ -1,14 +1,14 @@
-import {describe, it, expect, vi} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 
 import {
-  SYNC_MARKER,
-  isSyncedEvent,
-  createSyncDescription,
-  extractSourceCalendarAlias,
   buildAliasToCalendarIdMap,
-  createSyncEventKey,
   classifySourceEvent,
   computeSyncDiff,
+  createSyncDescription,
+  createSyncEventKey,
+  extractSourceCalendarAlias,
+  isSyncedEvent,
+  SYNC_MARKER,
 } from './main';
 
 // Mock GAS Calendar types
@@ -211,9 +211,7 @@ describe('classifySourceEvent', () => {
     const result = classify(event);
 
     expect(result).not.toBeNull();
-    expect(result!.key).toBe(
-      `cal-b|${start.getTime()}|${end.getTime()}`,
-    );
+    expect(result!.key).toBe(`cal-b|${start.getTime()}|${end.getTime()}`);
     expect(result!.description).toContain(SYNC_MARKER);
     expect(result!.description).toContain('source:cal-b');
   });
@@ -258,9 +256,7 @@ describe('classifySourceEvent', () => {
 
     expect(result).not.toBeNull();
     // Falls back to fromCalendarAlias since sourceAlias is null
-    expect(result!.key).toBe(
-      `cal-b|${start.getTime()}|${end.getTime()}`,
-    );
+    expect(result!.key).toBe(`cal-b|${start.getTime()}|${end.getTime()}`);
     expect(result!.description).toContain('source:cal-b');
   });
 
