@@ -18,6 +18,7 @@ interface SyncableEvent extends CalendarEventLike {
   getStartTime(): DateLike;
   getEndTime(): DateLike;
   isAllDayEvent(): boolean;
+  getMyStatus(): unknown;
 }
 
 /** Represents an event that should exist in the target calendar */
@@ -93,6 +94,21 @@ function createSyncEventKey(
   return `${sourceAlias}|${startTime.getTime()}|${endTime.getTime()}`;
 }
 
+/**
+ * Returns true when the source calendar owner has declined this event.
+ *
+ * GAS の `CalendarApp.GuestStatus` は enum だがテスト環境では利用できないため、
+ * `toString()` で "NO" になる値をすべて辞退扱いとして判定する。GAS 実行時の
+ * enum も文字列の "NO" と同じ扱いになる。
+ */
+function isDeclinedByOwner(event: SyncableEvent): boolean {
+  const status = event.getMyStatus();
+  if (status == null) {
+    return false;
+  }
+  return String(status) === 'NO';
+}
+
 function classifySourceEvent(
   event: SyncableEvent,
   fromCalendarAlias: string,
@@ -103,6 +119,11 @@ function classifySourceEvent(
 ): ClassifiedEvent | null {
   // Skip all-day events
   if (event.isAllDayEvent()) {
+    return null;
+  }
+
+  // Skip events the source calendar owner has declined
+  if (isDeclinedByOwner(event)) {
     return null;
   }
 
@@ -397,6 +418,7 @@ if (typeof module !== 'undefined') {
     buildAliasToCalendarIdMap,
     escapeRegExp,
     createSyncEventKey,
+    isDeclinedByOwner,
     classifySourceEvent,
     computeSyncDiff,
   };
