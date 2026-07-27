@@ -7,6 +7,7 @@ import {
   createSyncDescription,
   createSyncEventKey,
   extractSourceCalendarAlias,
+  isDeclinedByOwner,
   isSyncedEvent,
   SYNC_MARKER,
 } from './main';
@@ -18,6 +19,7 @@ interface MockCalendarEvent {
   getStartTime: () => Date;
   getEndTime: () => Date;
   isAllDayEvent: () => boolean;
+  getMyStatus: () => string | null;
   getId: () => string;
   deleteEvent: () => void;
   setDescription: (description: string) => MockCalendarEvent;
@@ -36,6 +38,7 @@ function createMockEvent(
     startTime: Date;
     endTime: Date;
     isAllDay: boolean;
+    myStatus: string | null;
     id: string;
   }> = {},
 ): MockCalendarEvent {
@@ -46,6 +49,7 @@ function createMockEvent(
     getStartTime: () => overrides.startTime ?? new Date('2024-01-01T10:00:00'),
     getEndTime: () => overrides.endTime ?? new Date('2024-01-01T11:00:00'),
     isAllDayEvent: () => overrides.isAllDay ?? false,
+    getMyStatus: () => overrides.myStatus ?? 'OWNER',
     getId: () => overrides.id ?? 'event-123',
     deleteEvent: vi.fn(),
     setDescription: vi.fn().mockReturnThis(),
@@ -178,6 +182,48 @@ describe('createSyncEventKey', () => {
   });
 });
 
+describe('isDeclinedByOwner', () => {
+  it('should return true when status is "NO"', () => {
+    const event = createMockEvent({myStatus: 'NO'});
+    expect(isDeclinedByOwner(event)).toBe(true);
+  });
+
+  it('should return false when status is "YES"', () => {
+    const event = createMockEvent({myStatus: 'YES'});
+    expect(isDeclinedByOwner(event)).toBe(false);
+  });
+
+  it('should return false when status is "MAYBE"', () => {
+    const event = createMockEvent({myStatus: 'MAYBE'});
+    expect(isDeclinedByOwner(event)).toBe(false);
+  });
+
+  it('should return false when status is "INVITED"', () => {
+    const event = createMockEvent({myStatus: 'INVITED'});
+    expect(isDeclinedByOwner(event)).toBe(false);
+  });
+
+  it('should return false when status is "OWNER"', () => {
+    const event = createMockEvent({myStatus: 'OWNER'});
+    expect(isDeclinedByOwner(event)).toBe(false);
+  });
+
+  it('should return false when status is null', () => {
+    const event = createMockEvent({myStatus: null});
+    expect(isDeclinedByOwner(event)).toBe(false);
+  });
+
+  it('should treat objects whose toString returns "NO" as declined', () => {
+    // GAS の CalendarApp.GuestStatus は enum object で、toString が "NO" 等を返す
+    const gasLikeStatus = {toString: () => 'NO'};
+    const event = {
+      ...createMockEvent(),
+      getMyStatus: () => gasLikeStatus as unknown as string,
+    };
+    expect(isDeclinedByOwner(event)).toBe(true);
+  });
+});
+
 describe('classifySourceEvent', () => {
   const defaultArgs = {
     fromCalendarAlias: 'cal-b',
@@ -200,6 +246,11 @@ describe('classifySourceEvent', () => {
 
   it('should return null for all-day events', () => {
     const event = createMockEvent({isAllDay: true});
+    expect(classify(event)).toBeNull();
+  });
+
+  it('should return null for events declined by the source calendar owner', () => {
+    const event = createMockEvent({myStatus: 'NO'});
     expect(classify(event)).toBeNull();
   });
 
