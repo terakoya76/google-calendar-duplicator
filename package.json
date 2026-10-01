@@ -5,7 +5,7 @@
     "@types/google-apps-script": "^2.0.13"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.6",
+    "@biomejs/biome": "^2.5.14",
     "@types/node": "^25.9.5",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"
