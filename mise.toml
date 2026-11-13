@@ -1,7 +1,9 @@
 [tools]
-node = "24"
-pnpm = "9"
-"npm:@google/clasp" = "3"
+node = "26"
+"npm:pnpm" = "12.18.0"
+"npm:@google/clasp" = "3.4.1"
+
+"aqua:suzuki-shunsuke/pinact" = "5.0.2"
 
 [env]
 # This will make CLIs installed with npm available without npx.
